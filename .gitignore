@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Runtime state. The honeypot writes captured traffic here: event logs, the
+# SQLite store, session data. It is operational evidence, not source, and it
+# will contain attacker-supplied content and captured system prompts.
+var/
+var-test/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+events.jsonl
+
+# Local operator config. configs/c47.toml is the committed example; a live
+# deployment's copy carries real addresses and should stay out of the repo.
+/c47.toml
+
+# Generated Cowrie integration files
+cowrie-overlay/
+
+# OS
+.DS_Store
