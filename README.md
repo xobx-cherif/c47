@@ -314,29 +314,6 @@ behavioural evidence must not reach confirmation.
   frequently the agent's real egress or a human's browser, while the attack
   traffic comes from disposable infrastructure.
 
-## Assets
-
-<div align="center">
-  <img src="assets/c47_logo.png" alt="CODENAME 47 HONEYPOT" width="420">
-</div>
-
-| File | Size | Use |
-|---|---|---|
-| `assets/c47_banner.png` | 2172×724 | README hero, social preview, slide headers |
-| `assets/c47_logo.png` | 1254×1254 | Square lockup — avatar, favicon source, docs |
-
-Both are on a black ground, so they sit correctly on a dark page and read as
-deliberate on a light one. The framing is the point: the silhouette in a
-crosshair flanked by two agent panels — `plan / exploit / escalate` on one side,
-`analyze / generate / execute` on the other — with a fingerprint reader beside
-them. That is what the framework does: the agent's own loop is what gets
-fingerprinted.
-
-Palette: red `#e01b2d`, white, black. The badges above use the same red.
-
-The terminal banner in `c47/banner.py` is separate and deliberately plain ASCII
-— it has to render in any terminal at any width, so it carries the wordmark and
-nothing else.
 
 ## Prior art
 
