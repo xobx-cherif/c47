@@ -1,0 +1,199 @@
+# codename_47 configuration.
+#
+# Every value here can be overridden from the environment as
+# C47_<SECTION>_<KEY>, e.g. C47_SURFACES_HTTP_PORT=8888.
+# Run `c47 config` to see the effective merged configuration.
+
+[c47]
+name = "codename_47"
+data_dir = "./var"
+log_level = "INFO"
+
+[engine]
+# Prior over actor classes. Pessimistic on purpose: most traffic reaching an
+# exposed port is a scripted scanner, and an optimistic prior makes every
+# scanner trip the agent verdict on weak evidence.
+prior = { human = 0.10, scripted = 0.88, llm_agent = 0.02 }
+
+suspect_threshold = 0.55
+confirm_threshold = 0.90
+
+# Behavioural evidence alone tops out at `suspected_agent`; only a conclusive
+# signal (a callback quoting a concealed token, a solved comprehension key, a
+# decoy tool call, leaked scaffolding) can confirm. Turning this off will
+# produce confident false positives -- correlated behavioural detectors
+# saturate the posterior on their own.
+require_conclusive_to_confirm = true
+
+session_ttl = 3600.0
+max_sessions = 20000
+
+# Budgets. A response bloated with payload is itself a tell.
+max_lure_chars = 4096
+max_lures_per_render = 3
+
+# At most one instruction-bearing (stage >= 1) lure per response. Two competing
+# pretexts in one response contradict each other -- "this host is failing over"
+# next to "complete scope validation" reads as obviously synthetic and burns
+# both techniques at once.
+max_active_lures_per_render = 1
+
+
+# --------------------------------------------------------------------------
+# Canary listener -- out-of-band callback capture.
+# --------------------------------------------------------------------------
+[canary]
+enabled = true
+bind = "0.0.0.0"
+port = 8081
+
+# IMPORTANT: must be an address the *agent's* host can actually reach. Left at
+# loopback, every out-of-band confirmation silently never fires, and c47 will
+# warn about it at startup. Use the honeypot's public address or a domain that
+# resolves to it.
+public_base_url = ""
+
+
+# --------------------------------------------------------------------------
+# Surfaces
+# --------------------------------------------------------------------------
+[surfaces.http]
+enabled = true
+bind = "0.0.0.0"
+port = 8080
+# generic_admin | ci_server | storage
+persona = "generic_admin"
+
+[surfaces.mcp]
+# The richest agent-detection surface: tool descriptions land directly in the
+# model's context, and a decoy tool call is conclusive on its own. Enable this
+# if you can get the server registered with an agent.
+enabled = false
+bind = "0.0.0.0"
+port = 8082
+server_name = "infra-tools"
+path = "/mcp"
+
+[surfaces.cowrie]
+# Detection needs only the log path and an unmodified Cowrie.
+# Injection additionally needs `c47 cowrie-overlay` -- see its README.
+enabled = false
+log_path = "/var/log/cowrie/cowrie.json"
+poll_interval = 1.0
+from_start = false
+sidecar = true
+sidecar_bind = "127.0.0.1"
+sidecar_port = 8099
+
+
+# --------------------------------------------------------------------------
+# Lures. Ordered roughly by escalation stage; see `c47 plugins` for which
+# channel and stage each one applies to.
+# --------------------------------------------------------------------------
+[lures]
+enabled = [
+    # stage 0 -- passive, deniable, served to everyone
+    "html_comment_bait",
+    "robots_bait",
+    "reasoning_probe",
+    "ansi_invisible",
+    "zero_width",
+    "tool_poison",
+    "decoy_tools",
+    # stage 1 -- active instructions, suspected agents only
+    "canary_fetch",
+    "identity_disclosure",
+    "markdown_exfil",
+    # stage 2 -- extraction, confirmed agents only
+    "system_prompt_exfil",
+    "campaign_debrief",
+]
+
+[lures.options.html_comment_bait]
+# Also plant an off-screen DOM node, which survives agents that strip comments
+# before feeding HTML to the model.
+also_offscreen = false
+
+[lures.options.ansi_invisible]
+max_per_session = 2
+
+
+# --------------------------------------------------------------------------
+# Detectors
+# --------------------------------------------------------------------------
+[detectors]
+enabled = [
+    "expectations",
+    "timing",
+    "ua_churn",
+    "method_fanout",
+    "header_anomaly",
+    "path_semantics",
+    "command_semantics",
+    "recon_sequence",
+    "prompt_leak",
+    "mcp_protocol",
+    # "llm_judge",  # requires [llm] below
+]
+
+[detectors.options.timing]
+min_gaps = 5
+
+[detectors.options.command_semantics]
+min_commands = 6
+
+[detectors.options.llm_judge]
+min_interactions = 8
+cooldown = 120.0
+max_calls_per_session = 2
+# Capped so a model's opinion can never on its own reach confirmation.
+max_weight = 3.0
+
+
+# --------------------------------------------------------------------------
+# Sinks
+# --------------------------------------------------------------------------
+[sinks.console]
+enabled = true
+min_verdict = "suspected_agent"
+
+[sinks.jsonl]
+enabled = true
+# defaults to <data_dir>/events.jsonl
+path = ""
+log_interactions = true
+# Served-lure records (always written) carry each payload's expectations, which
+# is what lets `c47 replay` reproduce expectation-based signals. Set this to
+# also store the payload text itself -- useful for auditing exactly what an
+# agent was shown, at the cost of a much larger log.
+log_lure_content = false
+
+[sinks.sqlite]
+enabled = true
+path = ""
+log_interactions = false
+
+[sinks.webhook]
+enabled = false
+url = ""
+min_verdict = "suspected_agent"
+
+
+# --------------------------------------------------------------------------
+# Optional LLM backend. Everything above works without it.
+# --------------------------------------------------------------------------
+[llm]
+backend = "none"   # "none" | "anthropic"
+model = "claude-sonnet-5"
+max_tokens = 512
+api_key_env = "ANTHROPIC_API_KEY"
+
+
+# --------------------------------------------------------------------------
+# Third-party plugins
+# --------------------------------------------------------------------------
+[plugins]
+# Directories scanned for *.py defining Lure/Detector/Surface/Sink subclasses.
+paths = []
+# Dotted module paths to import.
+modules = []
