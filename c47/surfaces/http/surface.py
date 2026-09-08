@@ -29,6 +29,7 @@ from urllib.parse import parse_qsl
 from aiohttp import web
 
 from c47.core.model import Channel, Interaction, Session
+from c47.core.net import client_ip
 from c47.core.spi import Surface
 from c47.surfaces.http.persona import get_persona, seed_for
 
@@ -48,6 +49,8 @@ class HttpSurface(Surface):
         self.bind = self.config.get("bind", "0.0.0.0")
         self.port = int(self.config.get("port", 8080))
         self.persona = get_persona(self.config.get("persona", "generic_admin"))
+        # Off by default: see c47.core.net. Enable only behind a proxy you own.
+        self.trust_forwarded = bool(self.config.get("trust_forwarded_headers", False))
         self._runner: web.AppRunner | None = None
 
     async def start(self) -> None:
@@ -70,7 +73,7 @@ class HttpSurface(Surface):
         engine = self.engine
         assert engine is not None
 
-        actor = _peer(request)
+        actor = client_ip(request, trust_forwarded=self.trust_forwarded)
         body = await _read_body(request)
         path = request.path or "/"
 
@@ -93,11 +96,15 @@ class HttpSurface(Surface):
         )
 
         # Step 1: observe. Detectors run here and may escalate the verdict.
-        session = await engine.observe(interaction)
+        # The sink write is deferred so the logged record can carry the status.
+        session = await engine.observe(interaction, defer_emit=True)
 
         # Step 2: build the response using the *post-observation* stage.
         response = await self._respond(session, request, path, body)
         interaction.data["status"] = response.status
+
+        # Step 3: now the record is complete, hand it to the sinks.
+        await engine.emit_interaction(session, interaction)
         return response
 
     # ------------------------------------------------------------------
@@ -264,13 +271,6 @@ class HttpSurface(Surface):
 
 # --------------------------------------------------------------------------
 
-
-def _peer(request: web.Request) -> str:
-    for header in ("X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP"):
-        value = request.headers.get(header)
-        if value:
-            return value.split(",")[0].strip()
-    return request.remote or "unknown"
 
 
 async def _read_body(request: web.Request) -> str:

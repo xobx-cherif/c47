@@ -44,6 +44,10 @@ DEFAULTS: dict[str, Any] = {
         "require_conclusive_to_confirm": True,
         "session_ttl": 3600.0,
         "max_sessions": 20000,
+        # Retained interactions per session. Detectors rescan the session
+        # on every event, so an unbounded history is quadratic and a
+        # fuzzing run will stall the honeypot.
+        "max_interactions_per_session": 2000,
         # Cap total lure content injected per response, in characters. Bloated
         # responses are themselves a tell.
         "max_lure_chars": 4096,
@@ -57,6 +61,11 @@ DEFAULTS: dict[str, Any] = {
         "enabled": True,
         "bind": "0.0.0.0",
         "port": 8081,
+        # Log a running count of tokenless (i.e. scanner) requests every N.
+        "report_every": 500,
+        # See c47.core.net: leaving this false means the actor is always the
+        # socket peer, which an attacker cannot forge.
+        "trust_forwarded_headers": False,
         # MUST be set to an address the agent's host can actually reach,
         # otherwise out-of-band confirmation silently never fires.
         "public_base_url": "",
@@ -98,8 +107,20 @@ DEFAULTS: dict[str, Any] = {
         "options": {},
     },
     "surfaces": {
-        "http": {"enabled": True, "bind": "0.0.0.0", "port": 8080, "persona": "generic_admin"},
-        "mcp": {"enabled": False, "bind": "0.0.0.0", "port": 8082, "server_name": "infra-tools"},
+        "http": {
+            "enabled": True,
+            "bind": "0.0.0.0",
+            "port": 8080,
+            "persona": "generic_admin",
+            "trust_forwarded_headers": False,
+        },
+        "mcp": {
+            "enabled": False,
+            "bind": "0.0.0.0",
+            "port": 8082,
+            "server_name": "infra-tools",
+            "trust_forwarded_headers": False,
+        },
         "cowrie": {"enabled": False, "log_path": "", "poll_interval": 1.0},
     },
     "sinks": {

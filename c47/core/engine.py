@@ -226,14 +226,38 @@ class Engine:
 
     # -- observation ------------------------------------------------------
 
-    async def observe(self, interaction: Interaction) -> Session:
-        """Record an interaction, run detectors, update the verdict."""
+    async def observe(self, interaction: Interaction, *, defer_emit: bool = False) -> Session:
+        """Record an interaction, run detectors, update the verdict.
+
+        ``defer_emit`` suppresses only the sink write, not the detector run. A
+        surface uses it when part of the record is not known until the response
+        has been built -- an HTTP status code, say -- and then calls
+        :meth:`emit_interaction` once it is. Without this the event log stored
+        ``status: null`` on every request, because the surface assigned the
+        status after ``observe`` had already handed the interaction to the
+        sinks, which cost replay the one field the path-semantics detector
+        needs.
+        """
         async with self._lock:
             session = self.session_for(interaction.actor)
             session.record(interaction)
             self.stats["interactions"] += 1
 
-        await self._emit("on_interaction", session, interaction)
+            # Bound the retained history. Detectors re-evaluate an accumulating
+            # pattern on every interaction and several of them rescan the whole
+            # session, so an unbounded history makes the pipeline quadratic:
+            # a 38k-request fuzzing run would spend ~10^9 operations
+            # re-analysing traffic it had already dismissed, and stall the
+            # honeypot mid-scan. Every signal of interest is visible in a
+            # window far smaller than this cap.
+            cap = self.config.get("engine.max_interactions_per_session", 2000)
+            excess = len(session.interactions) - cap
+            if excess > 0:
+                del session.interactions[:excess]
+                session.dropped_interactions += excess
+
+        if not defer_emit:
+            await self._emit("on_interaction", session, interaction)
 
         new_signals: list[Signal] = []
         for det in self.detectors:
@@ -280,6 +304,10 @@ class Engine:
                 await self._emit("on_verdict", session, previous)
 
         return session
+
+    async def emit_interaction(self, session: Session, interaction: Interaction) -> None:
+        """Write a deferred interaction to the sinks. See ``observe(defer_emit=)``."""
+        await self._emit("on_interaction", session, interaction)
 
     async def record_disclosure(self, session: Session, field: str, value: str, source: str) -> None:
         """Feed a captured secret into the campaign profile."""

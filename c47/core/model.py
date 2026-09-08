@@ -389,6 +389,11 @@ class Session:
     #: Surfaces the actor has touched, for cross-protocol correlation.
     surfaces: set[str] = field(default_factory=set)
 
+    #: Interactions trimmed from the head of the history to keep detector cost
+    #: bounded. Counted rather than silently discarded so an operator can see
+    #: that a session was larger than its retained window.
+    dropped_interactions: int = 0
+
     @property
     def stage(self) -> Stage:
         return Stage.for_verdict(self.verdict)
@@ -421,7 +426,8 @@ class Session:
             "verdict": self.verdict.value,
             "posterior": {k: round(v, 4) for k, v in self.posterior.items()},
             "surfaces": sorted(self.surfaces),
-            "interaction_count": len(self.interactions),
+            "interaction_count": len(self.interactions) + self.dropped_interactions,
+            "interactions_retained": len(self.interactions),
             "signals": [
                 {
                     "name": s.name,

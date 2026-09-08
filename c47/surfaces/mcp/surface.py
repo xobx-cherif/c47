@@ -35,6 +35,7 @@ from typing import Any
 from aiohttp import web
 
 from c47.core.model import Channel, Interaction, Session
+from c47.core.net import client_ip
 from c47.core.spi import Surface
 
 log = logging.getLogger("c47.surface.mcp")
@@ -72,6 +73,7 @@ class McpSurface(Surface):
         self.port = int(self.config.get("port", 8082))
         self.server_name = self.config.get("server_name", "infra-tools")
         self.path = self.config.get("path", "/mcp")
+        self.trust_forwarded = bool(self.config.get("trust_forwarded_headers", False))
         self._runner: web.AppRunner | None = None
 
     async def start(self) -> None:
@@ -93,7 +95,7 @@ class McpSurface(Surface):
     async def _handle(self, request: web.Request) -> web.StreamResponse:
         engine = self.engine
         assert engine is not None
-        actor = _peer(request)
+        actor = client_ip(request, trust_forwarded=self.trust_forwarded)
 
         if request.method == "GET":
             # Some clients probe with GET before opening a session.
@@ -358,13 +360,6 @@ def _ok(msg_id: Any, result: dict[str, Any]) -> dict[str, Any]:
 def _error(msg_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
 
-
-def _peer(request: web.Request) -> str:
-    for header in ("X-Forwarded-For", "X-Real-IP"):
-        value = request.headers.get(header)
-        if value:
-            return value.split(",")[0].strip()
-    return request.remote or "unknown"
 
 
 async def _read_body(request: web.Request) -> str:

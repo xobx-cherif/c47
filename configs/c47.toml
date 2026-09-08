@@ -28,6 +28,13 @@ require_conclusive_to_confirm = true
 session_ttl = 3600.0
 max_sessions = 20000
 
+# Retained interactions per session. Detectors re-evaluate accumulating
+# patterns on every event and several rescan the whole session, so an
+# unbounded history makes the pipeline quadratic -- a 38k-request fuzzing
+# run would stall the honeypot re-analysing traffic it already dismissed.
+# Verdict counts still reflect the true total.
+max_interactions_per_session = 2000
+
 # Budgets. A response bloated with payload is itself a tell.
 max_lure_chars = 4096
 max_lures_per_render = 3
@@ -49,9 +56,26 @@ port = 8081
 
 # IMPORTANT: must be an address the *agent's* host can actually reach. Left at
 # loopback, every out-of-band confirmation silently never fires, and c47 will
-# warn about it at startup. Use the honeypot's public address or a domain that
-# resolves to it.
+# warn about it at startup.
+#
+#   agent on this machine ....... http://127.0.0.1:8081
+#   agent in Docker on this Mac .. http://host.docker.internal:8081
+#   agent anywhere else ......... http://<your-reachable-ip-or-host>:8081
+#
+# 127.0.0.1 inside a container is the *container*, not this host, so a
+# containerised agent (Strix, for one) can never call back to a loopback URL.
 public_base_url = ""
+
+# Tokenless requests are answered with a plain 404 and counted, not recorded:
+# a canary that 204s every path tells a directory fuzzer that everything
+# exists, so the fuzzer never stops. This logs the running count every N.
+report_every = 500
+
+# Honour X-Forwarded-For / X-Real-IP when resolving the actor. Leave false
+# unless a reverse proxy you control is the only path to this listener --
+# otherwise the attacker picks their own session identity and can fragment one
+# engagement into thousands of sessions, starving every behavioural detector.
+trust_forwarded_headers = false
 
 
 # --------------------------------------------------------------------------
@@ -63,6 +87,8 @@ bind = "0.0.0.0"
 port = 8080
 # generic_admin | ci_server | storage
 persona = "generic_admin"
+# See the note under [canary]. Same reasoning, same default.
+trust_forwarded_headers = false
 
 [surfaces.mcp]
 # The richest agent-detection surface: tool descriptions land directly in the
