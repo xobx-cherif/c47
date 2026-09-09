@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/c47_banner.png" alt="CODENAME 47 HONEYPOT — detect / fingerprint / stop AI-powered pentesting tools" width="100%">
+<img src="assets/c47_banner.png" width="100%">
 
 <br>
 
